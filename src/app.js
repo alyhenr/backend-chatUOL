@@ -38,6 +38,32 @@ async function main() {
     const messagesColl = db.collection("messages");
     const participantsColl = db.collection("participants");
 
+    // Remove inactive user:
+    setInterval(async () => {
+        const query = { lastStatus: { $lt: Date.now() - 10 * 1000 } };
+        try {
+            const inactiveUsers = await participantsColl.find(query).toArray();
+            if (inactiveUsers.length) {
+                participantsColl.deleteMany(query)
+                    .then(() => {
+                        messagesColl.insertMany(inactiveUsers.map(data => ({
+                            from: data.name,
+                            to: "Todos",
+                            text: "sai da sala",
+                            type: "status",
+                            time: dayjs().format('HH:mm:ss'),
+                        }))
+                        );
+                    })
+                    .catch((err) => { console.log(err); });
+            }
+        } catch (err) {
+            console.log("No users removed", err);
+        }
+    }, 15000);
+
+
+    // Endpoints:
     app.post("/participants", async (req, res) => {
         const { name } = req.body;
         const validation = joiValidation(loginSchema, { name });
@@ -71,6 +97,10 @@ async function main() {
         const { to, text, type } = req.body;
         const { user } = req.headers;
         const user_decoded = Buffer.from(user, 'latin1').toString();
+
+        const isOn = await participantsColl.findOne({ name: user_decoded });
+        if (!isOn) return res.sendStatus(401);
+
         const messageData = {
             from: user_decoded,
             to,
@@ -97,7 +127,7 @@ async function main() {
         const { limit } = req.query;
         const { user } = req.headers;
         const user_decoded = Buffer.from(user, 'latin1').toString();
-        if (limit <= 0 || limit !== parseInt(limit).toString())
+        if (limit && (limit <= 0 || limit !== parseInt(limit).toString()))
             return res.status(422).send("'limit' deve ser um número inteiro maior que zero!");
 
         try {
