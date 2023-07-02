@@ -213,7 +213,7 @@ async function main() {
                     type,
                 },
             })
-            return res.sendStatus(204);
+            return res.sendStatus(200);
         } catch (err) {
             console.log(err);
             return res.sendStatus(500);
