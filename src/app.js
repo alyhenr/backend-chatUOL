@@ -60,11 +60,13 @@ async function main() {
         } catch (err) {
             console.log("No users removed", err);
         }
-    }, 150000000);
+    }, 15000);
 
     // Endpoints:
     app.post("/participants", (req, res) => {
         let { name } = req.body;
+        if (!name) { return res.sendStatus(422); }
+        else { name = Buffer.from(name, 'latin1').toString(); }
         const validation = joiValidation(loginSchema, { name });
         if (validation.error) {
             const errors = validation.error.details.map((detail) => detail.message);
@@ -150,7 +152,7 @@ async function main() {
 
     app.post("/status", async (req, res) => {
         const { user } = req.headers;
-        if (!user) return res.sendStatus(422);
+        if (!user) return res.sendStatus(404);
 
         const user_decoded = Buffer.from(user, 'latin1').toString();
 
