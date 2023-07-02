@@ -49,7 +49,7 @@ async function main() {
                         messagesColl.insertMany(inactiveUsers.map(data => ({
                             from: data.name,
                             to: "Todos",
-                            text: "sai da sala",
+                            text: "sai da sala...",
                             type: "status",
                             time: dayjs().format('HH:mm:ss'),
                         }))
@@ -60,7 +60,7 @@ async function main() {
         } catch (err) {
             console.log("No users removed", err);
         }
-    }, 15000);
+    }, 150000000);
 
     // Endpoints:
     app.post("/participants", (req, res) => {
@@ -79,7 +79,7 @@ async function main() {
                     await messagesColl.insertOne({
                         from: name,
                         to: "Todos",
-                        text: "entra na sala",
+                        text: "entra na sala...",
                         type: "status",
                         time: dayjs().format("HH:mm:ss"),
                     });
@@ -98,12 +98,12 @@ async function main() {
 
     app.post("/messages", async (req, res) => {
         const { user } = req.headers;
-        if (!user ||
-            !await participantsColl.findOne({ name: user_decoded }))
+        if (!user) return res.sendStatus(422);
+        const user_decoded = Buffer.from(user, 'latin1').toString();
+        if (!await participantsColl.findOne({ name: user_decoded }))
             return res.sendStatus(422);
 
         const { to, type, text } = req.body;
-        const user_decoded = Buffer.from(user, 'latin1').toString();
         const messageData = {
             from: user_decoded,
             to,
