@@ -65,8 +65,8 @@ async function main() {
     // Endpoints:
     app.post("/participants", (req, res) => {
         let { name } = req.body;
-        if (!name) { return res.sendStatus(422); }
-        else { name = Buffer.from(name, 'latin1').toString(); }
+        if (!name || typeof name !== "string") { return res.sendStatus(422); }
+        else { name = Buffer.from(name, 'utf-8').toString(); }
         const validation = joiValidation(loginSchema, { name });
         if (validation.error) {
             const errors = validation.error.details.map((detail) => detail.message);
@@ -192,9 +192,12 @@ async function main() {
         let { text } = req.body;
 
         const user_decoded = Buffer.from(user, 'latin1').toString();
-        const messageOwner = await participantsColl.findOne({ name: user_decoded });
-        if (!messageOwner || messageOwner['name'] !== user_decoded)
-            return res.sendStatus(401);
+        const query = { _id: new ObjectId(id) };
+
+        const message = await messagesColl.findOne(query);
+
+        if (!message) return res.sendStatus(404);
+        if (message['from'] !== user_decoded) return res.sendStatus(401);
 
         const validation = joiValidation(messageSchema,
             { from: user_decoded, to, text, type });
@@ -204,7 +207,6 @@ async function main() {
         } else { text = sanitize(text); }
 
         try {
-            const query = { _id: new ObjectId(id) };
             if (!await messagesColl.findOne(query)) return res.sendStatus(404);
             await messagesColl.updateOne({ _id: new ObjectId(id) }, {
                 $set: {
