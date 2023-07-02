@@ -98,14 +98,12 @@ async function main() {
 
     app.post("/messages", async (req, res) => {
         const { user } = req.headers;
-        if (!user) return res.sendStatus(401);
+        if (!user ||
+            !await participantsColl.findOne({ name: user_decoded }))
+            return res.sendStatus(422);
 
         const { to, type, text } = req.body;
         const user_decoded = Buffer.from(user, 'latin1').toString();
-
-        const isOn = await participantsColl.findOne({ name: user_decoded });
-        if (!isOn) return res.sendStatus(401);
-
         const messageData = {
             from: user_decoded,
             to,
@@ -152,12 +150,11 @@ async function main() {
 
     app.post("/status", async (req, res) => {
         const { user } = req.headers;
-        if (!user) return res.sendStatus(404);
+        if (!user) return res.sendStatus(422);
 
         const user_decoded = Buffer.from(user, 'latin1').toString();
-        const answer = await participantsColl.findOne({ name: user_decoded });
 
-        if (answer) {
+        if (await participantsColl.findOne({ name: user_decoded })) {
             participantsColl
                 .updateOne(
                     { name: user_decoded },
@@ -165,7 +162,7 @@ async function main() {
                 );
             res.sendStatus(200);
         } else {
-            res.status(404).send("Usuário não encontrado.");
+            res.status(422).send("Usuário não encontrado.");
         }
     });
 
