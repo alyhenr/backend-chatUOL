@@ -1,34 +1,28 @@
-import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
+import { Buffer } from 'node:buffer';
+import { stripHtml } from "string-strip-html";
+import express from "express";
+import cors from "cors";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
-import { Buffer } from 'node:buffer';
-import { stripHtml } from "string-strip-html";
 
 // Config --------------------
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 dotenv.config();
 const mongoClient = new MongoClient(process.env.DATABASE_URL);
-const dbName = "chatUOL";
-const collections = {
-    participants: "participants",
-    messages: "messages",
-}
-
 const loginSchema = joi.object({
     name: joi.string().required(),
 });
-
 const messageSchema = joi.object({
     from: joi.string().required(),
     to: joi.string().required(),
     text: joi.string().required(),
     type: joi.string().required().valid('message', 'private_message'),
 });
-
 const joiValidation = (schema, obj) => schema.validate(obj, { abortEarly: false });
 
 // Sanitize data:
@@ -40,7 +34,7 @@ const sanitize = data => {
 async function main() {
     await mongoClient.connect();
     console.log("Success connecting to db.");
-    const db = mongoClient.db(dbName);
+    const db = mongoClient.db();
     const messagesColl = db.collection("messages");
     const participantsColl = db.collection("participants");
 
@@ -89,7 +83,7 @@ async function main() {
                         type: "status",
                         time: dayjs().format("HH:mm:ss"),
                     });
-                    res.status(201).send({ name: name, lastStatus: Date.now() });
+                    res.status(201).send({ name, lastStatus: Date.now() });
                 })
         } catch (e) {
             res.sendStatus(500);
