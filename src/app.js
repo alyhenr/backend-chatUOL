@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
 import { Buffer } from 'node:buffer';
+import { stripHtml } from "string-strip-html";
 
 // Config --------------------
 const app = express();
@@ -29,6 +30,11 @@ const messageSchema = joi.object({
 });
 
 const joiValidation = (schema, obj) => schema.validate(obj, { abortEarly: false });
+
+// Sanitize data:
+const sanitize = data => {
+    return stripHtml(data).result.trim();
+};
 
 // --------------------------
 async function main() {
@@ -62,26 +68,29 @@ async function main() {
         }
     }, 15000);
 
-
     // Endpoints:
-    app.post("/participants", async (req, res) => {
-        const { name } = req.body;
+    app.post("/participants", (req, res) => {
+        let { name } = req.body;
         const validation = joiValidation(loginSchema, { name });
         if (validation.error) {
             const errors = validation.error.details.map((detail) => detail.message);
             return res.status(422).send(errors);
-        }
+        } else { name = sanitize(name); }
 
         try {
-            await participantsColl.insertOne({ name, lastStatus: Date.now() });
-            await messagesColl.insertOne({
-                from: name,
-                to: "Todos",
-                text: "entra na sala",
-                type: "status",
-                time: dayjs().format("HH:mm:ss"),
-            });
-            res.status(201).send({ name: name, lastStatus: Date.now() });
+            participantsColl.findOne({ name })
+                .then(async data => {
+                    if (data) return res.status(409).send("Usuário já está na sala.");
+                    await participantsColl.insertOne({ name, lastStatus: Date.now() });
+                    await messagesColl.insertOne({
+                        from: name,
+                        to: "Todos",
+                        text: "entra na sala",
+                        type: "status",
+                        time: dayjs().format("HH:mm:ss"),
+                    });
+                    res.status(201).send({ name: name, lastStatus: Date.now() });
+                })
         } catch (e) {
             res.sendStatus(500);
         }
@@ -94,8 +103,10 @@ async function main() {
     });
 
     app.post("/messages", async (req, res) => {
-        const { to, text, type } = req.body;
         const { user } = req.headers;
+        if (!user) return res.sendStatus(401);
+
+        const { to, type, text } = req.body;
         const user_decoded = Buffer.from(user, 'latin1').toString();
 
         const isOn = await participantsColl.findOne({ name: user_decoded });
@@ -116,7 +127,7 @@ async function main() {
         }
 
         try {
-            await messagesColl.insertOne({ ...messageData, time: dayjs().format("HH:mm:ss"), });
+            await messagesColl.insertOne({ ...messageData, text: sanitize(text), time: dayjs().format("HH:mm:ss"), });
             res.status(201).send(messageData);
         } catch (e) {
             res.sendStatus(500);
@@ -161,6 +172,58 @@ async function main() {
             res.sendStatus(200);
         } else {
             res.status(404).send("Usuário não encontrado.");
+        }
+    });
+
+    app.delete("/messages/:id", async (req, res) => {
+        const { id } = req.params;
+        const { user } = req.headers;
+        const message = await messagesColl.findOne({ _id: new ObjectId(id) });
+
+        if (!message) return res.sendStatus(404);
+        if (user != message['from']) return res.sendStatus(401);
+
+        try {
+            await messagesColl.deleteOne({ _id: new ObjectId(id) });
+            res.status(200).send(message);
+        } catch (err) {
+            console.log(err);
+            res.sendStatus(500);
+        }
+    });
+
+    app.put("/messages/:id", async (req, res) => {
+        const { id } = req.params;
+        const { user } = req.headers;
+        const { to, type } = req.body;
+        let { text } = req.body;
+
+        const user_decoded = Buffer.from(user, 'latin1').toString();
+        const messageOwner = await participantsColl.findOne({ name: user_decoded });
+        if (!messageOwner || messageOwner['name'] !== user_decoded)
+            return res.sendStatus(401);
+
+        const validation = joiValidation(messageSchema,
+            { from: user_decoded, to, text, type });
+        if (validation.error) {
+            const errors = validation.error.details.map((detail) => detail.message);
+            return res.status(422).send(errors);
+        } else { text = sanitize(text); }
+
+        try {
+            const query = { _id: new ObjectId(id) };
+            if (!await messagesColl.findOne(query)) return res.sendStatus(404);
+            await messagesColl.updateOne({ _id: new ObjectId(id) }, {
+                $set: {
+                    to,
+                    text,
+                    type,
+                },
+            })
+            return res.sendStatus(204);
+        } catch (err) {
+            console.log(err);
+            return res.sendStatus(500);
         }
     });
 }
