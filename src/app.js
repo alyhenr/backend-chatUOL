@@ -164,7 +164,7 @@ async function main() {
                 );
             res.sendStatus(200);
         } else {
-            res.status(422).send("Usuário não encontrado.");
+            res.status(404).send("Usuário não encontrado.");
         }
     });
 
